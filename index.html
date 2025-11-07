@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Restaurant Guide</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link href="https://api.mapbox.com/mapbox-gl-js/v3.16.0/mapbox-gl.css" rel="stylesheet">
+  <script src="https://api.mapbox.com/mapbox-gl-js/v3.16.0/mapbox-gl.js"></script>
+  <style>
+    body { margin: 0; padding: 0; font-family: sans-serif; }
+    #map { position: absolute; top: 0; bottom: 0; width: 100%; }
+
+    #cuisineFilter {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      z-index: 2;
+      padding: 5px;
+      font-size: 12px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      background: white;
+    }
+
+    #instructions {
+      position: absolute;
+      top: 45px;
+      left: 10px;
+      z-index: 2;
+      background: rgba(255, 255, 255, 0.85);
+      padding: 3px 6px;
+      border-radius: 4px;
+      font-size: 11px;
+      max-width: 220px;
+      line-height: 1.3;
+    }
+
+    #sidebar {
+      position: absolute;
+      top: 90px;
+      left: 10px;
+      z-index: 2;
+      width: 220px;
+      max-height: 60vh;
+      overflow-y: auto;
+      background: rgba(255, 255, 255, 0.95);
+      border-radius: 4px;
+      padding: 6px;
+      font-size: 11px;
+      box-shadow: 0 0 4px rgba(0,0,0,0.2);
+    }
+
+    .restaurant-item {
+      margin-bottom: 6px;
+      padding-bottom: 6px;
+      border-bottom: 1px solid #ddd;
+      cursor: pointer;
+    }
+
+    .restaurant-item:hover {
+      background: #f0f0f0;
+    }
+
+    .mapboxgl-popup-content {
+      max-width: 200px;
+      padding: 5px 6px;
+      font-size: 11px;
+      line-height: 1.3;
+    }
+
+    @media (max-width: 600px) {
+      #cuisineFilter, #instructions, #sidebar {
+        left: 5%;
+        width: 90%;
+      }
+      #instructions { top: 55px; }
+      #sidebar { top: 100px; }
+    }
+  </style>
+</head>
+<body>
+  <select id="cuisineFilter">
+    <option value="">Select Cuisine</option>
+    <option value="Brazilian">Brazilian</option>
+    <option value="Portuguese">Portuguese</option>
+    <option value="Spanish">Spanish</option>
+    <option value="Latin American">Latin American</option>
+    <option value="American, Southern/Soul Food, European">American, Southern/Soul Food, European</option>
+    <option value="African, Caribbean, Middle Eastern">African, Caribbean, Middle Eastern</option>
+    <option value="Churrasco/Portuguese BBQ">Churrasco/Portuguese BBQ</option>
+    <option value="Cafes, Bakeries, Dessert">Cafes, Bakeries, Dessert</option>
+    <option value="Asian">Asian</option>
+    <option value="clear">Clear Popups</option>
+  </select>
+  <div id="instructions">
+    Filter restaurants by cuisine type using the dropdown. Select "Clear Popups" to remove all windows.
+  </div>
+  <div id="sidebar"></div>
+  <div id="map"></div>
+  <script>
+    mapboxgl.accessToken = 'pk.eyJ1IjoicmdhbmRvbGZmIiwiYSI6ImNtaDZhemZjMzBnbjQyanB0NHg2ZHJjZ3oifQ.3cv8mTmaVf2IHnG5TjCirQ';
+
+    const map = new mapboxgl.Map({
+      container: 'map',
+      style: 'mapbox://styles/rgandolff/cmhfg9uf700gp01qw8vgc8q6l',
+      projection: 'globe',
+      zoom: 12,
+      center: [-74.17125487497198, 40.74820109384346]
+    });
+
+    map.addControl(new mapboxgl.NavigationControl());
+    map.scrollZoom.enable();
+
+    const layers = [
+      { id: 'brazilian-restaurant-reviews', cuisine: 'Brazilian', sourceLayer: 'Brazilian_Restaurant_Reviews' },
+      { id: 'portuguese-restaurant-reviews', cuisine: 'Portuguese', sourceLayer: 'Portuguese_Restaurant_Reviews' },
+      { id: 'spanish-restaurant-reviews', cuisine: 'Spanish', sourceLayer: 'Spanish_Restaurant_Reviews' },
+      { id: 'latin-american-restaurants', cuisine: 'Latin American', sourceLayer: 'Latin_American_Restaurants' },
+      { id: 'american-southernsoul-food-europ', cuisine: 'American, Southern/Soul Food, European', sourceLayer: 'American_SouthernSoul_Food_Europ' },
+      { id: 'african-caribbean-middle-eastern', cuisine: 'African, Caribbean, Middle Eastern', sourceLayer: 'African_Caribbean_Middle_Eastern' },
+      { id: 'churrasco-portuguese-bbq-restau', cuisine: 'Churrasco/Portuguese BBQ', sourceLayer: 'Churrasco__Portuguese_BBQ_Restau' },
+      { id: 'cafes-bakeries-dessert', cuisine: 'Cafes, Bakeries, Dessert', sourceLayer: 'Cafes_Bakeries__Dessert' },
+      { id: 'asian-restaurants', cuisine: 'Asian', sourceLayer: 'Asian_Restaurants' }
+    ];
+
+    let activePopups = [];
+
+    function clearPopups() {
+      activePopups.forEach(p => p.remove());
+      activePopups = [];
+    }
+
+    function createPopupHTML({ name, cuisine, address, rating, review }) {
+      const safeId = `review-${Math.random().toString(36).substr(2, 9)}`;
+      return `
+        <strong>${name}</strong><br>
+        <em>${cuisine} Cuisine</em><br>
+        ${address}<br>
+        <strong>Rating:</strong> ${rating}<br>
+        <a href="#" onclick="document.getElementById('${safeId}').style.display='block'; this.style.display='none'; return false;">📖 Show Review</a>
+        <div id="${safeId}" style="display:none; margin-top:2px; font-size:10px;"><strong>Review:</strong> ${review}</div>
+      `;
+    }
+
+    function enableScrollZoomOverPopup(popupElement) {
+      popupElement.addEventListener('wheel', function(event) {
+        const canvas = map.getCanvas();
+        const clonedEvent = new WheelEvent('wheel', {
+          deltaX: event.deltaX,
+          deltaY: event.deltaY,
+          deltaZ: event.deltaZ,
+          deltaMode: event.deltaMode,
+          bubbles: true,
+          cancelable: true
+        });
+        canvas.dispatchEvent(clonedEvent);
+      }, { passive: false });
+    }
+
+    function updateSidebar(features, selectedCuisine) {
+      const sidebar = document.getElementById('sidebar');
+      sidebar.innerHTML = '';
+      if (features.length === 0) {
+        sidebar.innerHTML = '<p>No matching restaurants found.</p>';
+        return;
+      }
+      features.forEach(feature => {
+        const name = feature.properties.name || 'Unnamed';
+        const address = feature.properties.address || 'Address not available';
+        const rating = feature.properties.rating ? `${feature.properties.rating} / 5` : 'Rating not available';
+        const review = feature.properties.review || 'No review available';
+        const coords = feature.geometry.coordinates;
+
+        const item = document.createElement('div');
+        item.className = 'restaurant-item';
+        item.innerHTML = `<strong>${name}</strong><br>${address}`;
+        item.onclick = () => {
+          clearPopups();
+          const popup = new mapboxgl.Popup()
+            .setLngLat(coords)
+            .setHTML(createPopupHTML({ name, cuisine: selectedCuisine, address, rating, review }))
+            .addTo(map);
+          activePopups.push(popup);
+          setTimeout(() => {
+            const popupEl = document.querySelector('.mapboxgl-popup-content');
+            if (popupEl) enableScrollZoomOverPopup(popupEl);
+          }, 0);
+          map.easeTo({ center: coords, zoom: 14 });
+        };
+        sidebar.appendChild(item);
+      });
+    }
+
+    map.on('style.load', () => {
+      map.setFog({});
+
+      layers.forEach(({ id, cuisine }) => {
+        map.on('click', id, (e) => {
+          clearPopups();
+          
+          const feature = e.features[0];
+          const coordinates = feature.geometry.coordinates.slice();
+          const name = feature.properties.name || 'Unnamed';
+          const address = feature.properties.address || 'Address not available';
+          const rating = feature.properties.rating ? `${feature.properties.rating} / 5` : 'Rating not available';
+          const review = feature.properties.review || 'No review available';
+
+          const popup = new mapboxgl.Popup()
+            .setLngLat(coordinates)
+            .setHTML(createPopupHTML({ name, cuisine, address, rating, review }))
+            .addTo(map);
+          activePopups.push(popup);
+          setTimeout(() => {
+            const popupEl = document.querySelector('.mapboxgl-popup-content');
+            if (popupEl) enableScrollZoomOverPopup(popupEl);
+          }, 0);
+        });
+
+        map.on('mouseenter', id, () => {
+          map.getCanvas().style.cursor = 'pointer';
+        });
+
+        map.on('mouseleave', id, () => {
+          map.getCanvas().style.cursor = '';
+        });
+      });
+
+      document.getElementById('cuisineFilter').addEventListener('change', (e) => {
+        const selectedCuisine = e.target.value;
+        clearPopups();
+        document.getElementById('sidebar').innerHTML = '';
+
+        if (!selectedCuisine || selectedCuisine === 'clear') return;
+
+        // Reset viewpoint before querying
+        map.easeTo({ zoom: 12, center: [-74.17125487497198, 40.74820109384346] });
+
+        // Delay query to allow map to settle
+        setTimeout(() => {
+          const layerInfo = layers.find(l => l.cuisine === selectedCuisine);
+          if (!layerInfo) {
+            console.warn('No matching layer for selected cuisine');
+            return;
+          }
+
+          const features = map.queryRenderedFeatures({ layers: [layerInfo.id] });
+
+          if (features.length === 0) {
+            document.getElementById('sidebar').innerHTML = '<p>No matching restaurants found.</p>';
+            return;
+          }
+
+          features.forEach(feature => {
+            const coords = feature.geometry.coordinates;
+            const name = feature.properties.name || 'Unnamed';
+            const address = feature.properties.address || 'Address not available';
+            const rating = feature.properties.rating ? `${feature.properties.rating} / 5` : 'Rating not available';
+            const review = feature.properties.review || 'No review available';
+
+            const popup = new mapboxgl.Popup({ closeOnClick: false })
+              .setLngLat(coords)
+              .setHTML(createPopupHTML({ name, cuisine: selectedCuisine, address, rating, review }))
+              .addTo(map);
+
+            activePopups.push(popup);
+
+            setTimeout(() => {
+              const popupEl = document.querySelector('.mapboxgl-popup-content');
+              if (popupEl) enableScrollZoomOverPopup(popupEl);
+            }, 0);
+          });
+
+          updateSidebar(features, selectedCuisine);
+        }, 500); // Delay to ensure map has reset
+      });
+    });
+  </script>
+</body>
+</html>
