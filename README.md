@@ -8,7 +8,7 @@ An interactive map featuring restaurant reviews and cuisine filters in Newark, N
 - Mobile-responsive layout
   
 ## Credits
-Built by Brick Citty Bite using Mapbox GL JS.
+Built by Brick City Bite using Mapbox GL JS.
 
 ## License
 MIT
