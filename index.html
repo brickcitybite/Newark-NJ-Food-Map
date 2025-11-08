@@ -81,10 +81,9 @@
   <script>
     mapboxgl.accessToken = 'pk.eyJ1IjoicmdhbmRvbGZmIiwiYSI6ImNtaDZhemZjMzBnbjQyanB0NHg2ZHJjZ3oifQ.3cv8mTmaVf2IHnG5TjCirQ';
 
-    // Broad bounds for Newark area — adjust as needed to cover your dataset
     const CITY_BOUNDS = new mapboxgl.LngLatBounds(
-      [-74.25, 40.68], // SW
-      [-74.10, 40.80]  // NE
+      [-74.25, 40.68],
+      [-74.10, 40.80]
     );
 
     const map = new mapboxgl.Map({
@@ -119,10 +118,12 @@
       activePopups = [];
     }
 
-    function createPopupHTML(name, rating, review) {
+    function createPopupHTML(name, rating, review, address) {
       const reviewId = `review-${Math.random().toString(36).substr(2, 9)}`;
       return `
-        <strong>${name}</strong><br>⭐ ${rating}<br>
+        <strong>${name}</strong><br>
+        ${address}<br>
+        ⭐ ${rating}<br>
         <a href="#" onclick="document.getElementById('${reviewId}').style.display='block'; this.style.display='none'; return false;">Show review</a>
         <div id="${reviewId}" style="display:none; margin-top:4px; font-size:11px;">${review}</div>
       `;
@@ -139,17 +140,17 @@
         const name = feature.properties.name || 'Unnamed';
         const rating = feature.properties.rating ? `${feature.properties.rating}` : 'No rating';
         const review = feature.properties.review || 'No review available';
+        const address = feature.properties.address || 'Address not available';
         const coords = feature.geometry.coordinates;
 
         const item = document.createElement('div');
         item.className = 'restaurant-item';
-        item.innerHTML = `<strong>${name}</strong> — ${rating}`;
+        item.innerHTML = `<strong>${name}</strong> — ${rating}<br>${address}`;
         item.onclick = () => {
-          // Zoom and show popup with toggleable review
           map.easeTo({ center: coords, zoom: 14 });
           const popup = new mapboxgl.Popup()
             .setLngLat(coords)
-            .setHTML(createPopupHTML(name, rating, review))
+            .setHTML(createPopupHTML(name, rating, review, address))
             .addTo(map);
           activePopups.push(popup);
         };
@@ -157,7 +158,6 @@
       });
     }
 
-    // Fit to broad bounds and wait for idle before querying
     function fitAndQuery(sourceLayer) {
       return new Promise(resolve => {
         map.fitBounds(CITY_BOUNDS, { padding: 30, duration: 300 });
@@ -171,7 +171,6 @@
     map.on('style.load', () => {
       map.setFog({});
 
-      // Map clicks: update sidebar and show interactive popup
       layers.forEach(({ id }) => {
         map.on('click', id, (e) => {
           clearAll();
@@ -181,11 +180,12 @@
           const name = feature.properties.name || 'Unnamed';
           const rating = feature.properties.rating ? `${feature.properties.rating}` : 'No rating';
           const review = feature.properties.review || 'No review available';
+          const address = feature.properties.address || 'Address not available';
 
           map.easeTo({ center: coords, zoom: 14 });
           const popup = new mapboxgl.Popup()
             .setLngLat(coords)
-            .setHTML(createPopupHTML(name, rating, review))
+            .setHTML(createPopupHTML(name, rating, review, address))
             .addTo(map);
           activePopups.push(popup);
         });
@@ -194,12 +194,10 @@
         map.on('mouseleave', id, () => map.getCanvas().style.cursor = '');
       });
 
-      // Dropdown behavior with clear + robust querying
       const filterEl = document.getElementById('cuisineFilter');
       filterEl.addEventListener('change', async (e) => {
         const selected = e.target.value;
-
-        if (!selected) return;
+                if (!selected) return;
 
         if (selected === 'clear') {
           clearAll();
@@ -221,7 +219,8 @@
           features.forEach(f => bounds.extend(f.geometry.coordinates));
           map.fitBounds(bounds, { padding: 40, duration: 500 });
         } else {
-          document.getElementById('sidebar').innerHTML = '<p>No matching restaurants found.</p>';
+          const sidebar = document.getElementById('sidebar');
+          sidebar.innerHTML = '<p>No matching restaurants found.</p>';
         }
 
         filterEl.selectedIndex = 0;
