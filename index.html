@@ -2,48 +2,62 @@
 <html>
 <head>
   <meta charset="utf-8">
-  <title>Restaurant Guide</title>
+  <title>Brick City Bite Newark Food Map</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <link href="https://api.mapbox.com/mapbox-gl-js/v3.16.0/mapbox-gl.css" rel="stylesheet">
   <script src="https://api.mapbox.com/mapbox-gl-js/v3.16.0/mapbox-gl.js"></script>
   <style>
-    body { margin: 0; padding: 0; font-family: sans-serif; }
-    #map { position: absolute; top: 0; bottom: 0; width: 100%; }
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: sans-serif;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+    }
+
+    /* Compact header with dropdown + sidebar */
+    #header {
+      background: #fff;
+      padding: 6px;
+      border-bottom: 1px solid #ccc;
+      z-index: 2;
+      display: flex;
+      gap: 8px;
+      align-items: flex-start;
+    }
 
     #cuisineFilter {
-      position: absolute;
-      top: 10px;
-      left: 10px;
-      z-index: 2;
-      padding: 5px;
-      font-size: 14px;
+      padding: 4px;
+      font-size: 13px;
       border: 1px solid #ccc;
       border-radius: 4px;
       background: white;
+      max-width: 160px;
     }
 
+    /* Sidebar docked in header, compact */
     #sidebar {
-      position: absolute;
-      top: 50px;
-      left: 10px;
-      z-index: 2;
-      width: 220px;
-      max-height: 70vh;
+      flex: 1;
+      max-height: 120px; /* smaller height for mobile */
       overflow-y: auto;
       background: rgba(255, 255, 255, 0.95);
       border-radius: 4px;
-      padding: 6px;
-      font-size: 13px;
-      box-shadow: 0 0 4px rgba(0,0,0,0.2);
+      padding: 4px;
+      font-size: 12px;
+      box-shadow: 0 0 2px rgba(0,0,0,0.2);
     }
 
     .restaurant-item {
-      margin-bottom: 6px;
-      padding: 4px;
-      border-bottom: 1px solid #ddd;
+      margin-bottom: 4px;
+      padding: 2px 0;
+      border-bottom: 1px solid #eee;
       cursor: pointer;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
-    .restaurant-item:hover { background: #f0f0f0; }
+    .restaurant-item:hover { background: #f9f9f9; }
 
     .mapboxgl-popup-content {
       max-width: 220px;
@@ -52,30 +66,49 @@
       line-height: 1.3;
     }
 
+    /* Map fills remaining space */
+    #map {
+      flex: 1;
+      width: 100%;
+      position: relative;
+    }
+
     @media (max-width: 600px) {
-      #cuisineFilter, #sidebar {
-        left: 5%;
-        width: 90%;
+      #header {
+        flex-direction: column;
+        gap: 6px;
       }
-      #sidebar { top: 60px; font-size: 12px; }
+      #cuisineFilter, #sidebar {
+        width: 100%;
+        max-width: none;
+      }
+      #sidebar {
+        max-height: 100px;
+        font-size: 11px;
+      }
     }
   </style>
 </head>
 <body>
-  <select id="cuisineFilter">
-    <option value="">Select Cuisine</option>
-    <option value="Brazilian">Brazilian</option>
-    <option value="Portuguese">Portuguese</option>
-    <option value="Spanish">Spanish</option>
-    <option value="Latin American">Latin American</option>
-    <option value="American, Southern/Soul Food, European">American, Southern/Soul Food, European</option>
-    <option value="African, Caribbean, Middle Eastern">African, Caribbean, Middle Eastern</option>
-    <option value="Churrasco/Portuguese BBQ">Churrasco/Portuguese BBQ</option>
-    <option value="Cafes, Bakeries, Dessert">Cafes, Bakeries, Dessert</option>
-    <option value="Asian">Asian</option>
-    <option value="clear">Clear Sidebar/Popups</option>
-  </select>
-  <div id="sidebar"></div>
+  <!-- Header with dropdown and sidebar side by side -->
+  <div id="header">
+    <select id="cuisineFilter">
+      <option value="">Select Cuisine</option>
+      <option value="Brazilian">Brazilian</option>
+      <option value="Portuguese">Portuguese</option>
+      <option value="Spanish">Spanish</option>
+      <option value="Latin American">Latin American</option>
+      <option value="American, Southern/Soul Food, European">American, Southern/Soul Food, European</option>
+      <option value="African, Caribbean, Middle Eastern">African, Caribbean, Middle Eastern</option>
+      <option value="Churrasco/Portuguese BBQ">Churrasco/Portuguese BBQ</option>
+      <option value="Cafes, Bakeries, Dessert">Cafes, Bakeries, Dessert</option>
+      <option value="Asian">Asian</option>
+      <option value="clear">Clear Sidebar/Popups</option>
+    </select>
+    <div id="sidebar"></div>
+  </div>
+
+  <!-- Map below header -->
   <div id="map"></div>
 
   <script>
@@ -145,8 +178,10 @@
 
         const item = document.createElement('div');
         item.className = 'restaurant-item';
-        item.innerHTML = `<strong>${name}</strong> — ${rating}<br>${address}`;
+        // Compact one-line format
+        item.innerHTML = `${name} — ⭐ ${rating} — ${address}`;
         item.onclick = () => {
+          // Zoom only when sidebar item is clicked
           map.easeTo({ center: coords, zoom: 14 });
           const popup = new mapboxgl.Popup()
             .setLngLat(coords)
@@ -180,9 +215,9 @@
           const name = feature.properties.name || 'Unnamed';
           const rating = feature.properties.rating ? `${feature.properties.rating}` : 'No rating';
           const review = feature.properties.review || 'No review available';
-          const address = feature.properties.address || 'Address not available';
+                    const address = feature.properties.address || 'Address not available';
 
-          map.easeTo({ center: coords, zoom: 14 });
+          // Marker click: only show popup, no zoom reset
           const popup = new mapboxgl.Popup()
             .setLngLat(coords)
             .setHTML(createPopupHTML(name, rating, review, address))
@@ -197,7 +232,7 @@
       const filterEl = document.getElementById('cuisineFilter');
       filterEl.addEventListener('change', async (e) => {
         const selected = e.target.value;
-                if (!selected) return;
+        if (!selected) return;
 
         if (selected === 'clear') {
           clearAll();
